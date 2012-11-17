@@ -102,11 +102,20 @@ void usage(int argc, char** argv)
 	fprintf
 	(
 		stderr,
-		"Usage: %s mode [-f file|host1:port1 [host2:port2...]]\n"
+		"Usage: %s mode [-f file|proxy1 [proxy2...]]\n"
 		"\n"
 		"mode:\n"
 		"  path   p  make a proxy chain to the target\n"
 		"  check  c  check that each proxy works\n"
+		"\n"
+		"proxies: the list of proxies can be given as the arguments of the command line\n"
+		"         or as a file (one per line) ; if no option is given, stdin is assumed\n"
+		"         a proxy is of the form\n"
+		"\n"
+		"host:port[:type]\n"
+		"  host   is an IPv4, IPv6 (not after a SOCKS4 proxy) or domain address\n"
+		"  port   is the port where the server listens for connections\n"
+		"  type   is optionnal and can be either 'socks4' or 'socks5'\n"
 		,
 		argv[0]
 	);
