@@ -176,6 +176,14 @@ int main(int argc, char** argv)
 			break;
 		char* host = strtok(f ? line : argv[no+2], ":");
 		char* port = strtok(NULL, "\n");
+		char* type = strchr(port, ':');
+		char socks5enable = 0;
+		if (type)
+		{
+			*(type++) = 0;
+			if (!strcmp(type, "socks5"))
+				socks5enable = 1;
+		}
 		if (!host || !port)
 			break;
 		switch (mode)
@@ -191,7 +199,7 @@ int main(int argc, char** argv)
 					return 1;
 				}
 			}
-			else if (socks4(proxy, host, port) < 0)
+			else if ((socks5enable ? socks5 : socks4)(proxy, host, port) < 0)
 			{
 				fprintf(stderr, "no %i: Could not reach next node (%s)\n", no, host);
 				close(proxy);
@@ -202,8 +210,8 @@ int main(int argc, char** argv)
 			proxy = TCP_Connect(host, port);
 			if (proxy >= 0)
 			{
-				if (socks4(proxy, targetHost, targetPort) == 0)
-					fprintf(stdout, "%s:%s\n", host, port);
+				if ((socks5enable ? socks5 : socks4)(proxy, targetHost, targetPort) == 0)
+					fprintf(stdout, "%s:%s:%s\n", host, port, socks5enable ? "socks5" : "socks4");
 				close(proxy);
 			}
 			break;
