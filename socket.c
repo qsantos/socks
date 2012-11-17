@@ -21,8 +21,10 @@
 #include <string.h>
 #include <unistd.h>
 #include <netdb.h>
+#include <sys/time.h>
 
-#include <stdio.h> // TODO
+static struct timeval timeout = { 5, 0 };
+
 int TCP_Connect(const char* node, const char* service)
 {
 // see getaddrinfo(2)
@@ -39,6 +41,9 @@ int TCP_Connect(const char* node, const char* service)
 	while (cur)
 	{
 		sock = socket(cur->ai_family, cur->ai_socktype, cur->ai_protocol);
+		setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(struct timeval));
+		setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(struct timeval));
+
 		if (sock == -1)
 			continue; // try next addrinfo
 
@@ -51,6 +56,7 @@ int TCP_Connect(const char* node, const char* service)
 
 	if (!cur)
 		sock = -1;
+
 	freeaddrinfo(result);
 	return sock;
 }
@@ -104,4 +110,10 @@ int TCP_Accept(int sock)
 		return -1;
 
 	return client;
+}
+
+void TCP_Timeout(int sec, int usec)
+{
+	timeout.tv_sec = sec;
+	timeout.tv_usec = usec;
 }

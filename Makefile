@@ -1,16 +1,16 @@
-CFLAGS  = -Wall -Wextra -Werror -pedantic -std=c99 -O3 -D_XOPEN_SOURCE=600
+CFLAGS  = -Wall -Wextra -Werror -pedantic -std=c99 -O3 -D_XOPEN_SOURCE=700
 LDFLAGS = -O3
-EXEC    = proxy
-SRC     = $(wildcard *.c)
+TARGET  = proxy
+SRC     = main.c socket.c
 OBJ     = $(SRC:.c=.o)
 
-all: $(EXEC)
+all: $(TARGET)
 
-$(EXEC): $(OBJ)
-	gcc $(LDFLAGS) $(OBJ) -o $(EXEC)
+$(TARGET): $(OBJ)
+	gcc $(LDFLAGS) $^ -o $@
 
 %.o: %.c
 	gcc $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(EXEC) $(OBJ)
+	rm -f $(TARGET) $(OBJ)

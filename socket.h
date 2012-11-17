@@ -24,4 +24,6 @@ int TCP_ListenTo(const char*, const char*);
 int TCP_Listen  (const char*);
 int TCP_Accept  (int);
 
+void TCP_Timeout(int, int);
+
 #endif
