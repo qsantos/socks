@@ -15,7 +15,7 @@ void passThrough(int from, int to)
 	write(to, buffer, n);
 }
 
-int proxyto(int socket, char* host, char* port)
+int socks4(int socket, char* host, char* port)
 {
 	static char greeting[9] = { 0x04, 0x01 };
 	static char buffer[8];
@@ -39,6 +39,63 @@ int proxyto(int socket, char* host, char* port)
 	return buffer[1] == 0x5a ? 0 : -1;
 }
 
+int socks5(int socket, char* host, char* port)
+{
+	static char auth[3] = { 0x05, 0x01, 0x00 };
+	write(socket, auth, 3);
+	static char res[2];
+	read(socket, res, 2);
+	if (res[0] != 0x05 || res[1] != 0x00)
+		return -1;
+
+// V version
+// C command
+// R reserved
+// F family
+// N length
+// A address
+// P port
+
+	char IPgreeting[22] = { 0x05, 0x01, 0x00 };
+	char* greeting = IPgreeting;
+	char tofree = 0;
+	int offset;
+	if (inet_pton(AF_INET, host, greeting + 4))
+	{
+		greeting[3] = 0x01; // VCRFAAAAPP
+		offset = 8;
+	}
+	else if (inet_pton(AF_INET6, host, greeting + 4))
+	{
+		greeting[3] = 0x04; // VCRFAAAAAAAAAAAAAAAAPP
+		offset = 20;
+	}
+	else
+	{
+		char len = strlen(host);
+		greeting = (char*) malloc(7 + len);
+		greeting[0] = 0x05;
+		greeting[1] = 0x01;
+		greeting[3] = 0x03; // VCFRNA..APP
+		greeting[4] = len;
+		memcpy(greeting+4, &len, 1);
+		memcpy(greeting+5, host, len);
+		offset = len + 5;
+		tofree = 1;
+	}
+	short ns_port = htons(atoi(port));
+	memcpy(greeting+offset, &ns_port, 2);
+
+	write(socket, greeting, offset+2);
+	read (socket, greeting, offset+2);
+
+	char success= greeting[0] == 0x05 && greeting[1] == 0x00;
+	if (tofree) 
+		free(greeting);
+
+	return success ? 0 : -1;
+}
+
 void usage(int argc, char** argv)
 {
 	(void) argc;
@@ -48,7 +105,7 @@ void usage(int argc, char** argv)
 		"Usage: %s mode [-f file|host1:port1 [host2:port2...]]\n"
 		"\n"
 		"mode:\n"
-		"  path   p  make a proxy chain to the tarfet\n"
+		"  path   p  make a proxy chain to the target\n"
 		"  check  c  check that each proxy works\n"
 		,
 		argv[0]
@@ -134,7 +191,7 @@ int main(int argc, char** argv)
 					return 1;
 				}
 			}
-			else if (proxyto(proxy, host, port) < 0)
+			else if (socks4(proxy, host, port) < 0)
 			{
 				fprintf(stderr, "no %i: Could not reach next node (%s)\n", no, host);
 				close(proxy);
@@ -145,7 +202,7 @@ int main(int argc, char** argv)
 			proxy = TCP_Connect(host, port);
 			if (proxy >= 0)
 			{
-				if (proxyto(proxy, targetHost, targetPort) == 0)
+				if (socks4(proxy, targetHost, targetPort) == 0)
 					fprintf(stdout, "%s:%s\n", host, port);
 				close(proxy);
 			}

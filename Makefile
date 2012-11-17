@@ -13,4 +13,9 @@ $(TARGET): $(OBJ)
 	gcc $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(TARGET) $(OBJ)
+	rm -f $(OBJ)
+
+destroy: clean
+	rm -f $(TARGET)
+
+rebuild: destroy all
