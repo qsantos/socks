@@ -13,7 +13,7 @@ $(TARGET): $(OBJ)
 	gcc $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJ)
+	rm -f *.o
 
 destroy: clean
 	rm -f $(TARGET)
