@@ -36,7 +36,7 @@ int socks4(int socket, char* host, char* port)
 		write(socket, host, strlen(host)+1);
 	read(socket, buffer, 8);
 
-	return buffer[1] == 0x5a ? 0 : -1;
+	return buffer[1] == 0x5a ? 0 : buffer[1];;
 }
 
 int socks5(int socket, char* host, char* port)
@@ -45,8 +45,8 @@ int socks5(int socket, char* host, char* port)
 	write(socket, auth, 3);
 	static char res[2];
 	read(socket, res, 2);
-	if (res[0] != 0x05 || res[1] != 0x00)
-		return -1;
+	if (res[1])
+		return res[1];
 
 // V version
 // C command
@@ -89,11 +89,11 @@ int socks5(int socket, char* host, char* port)
 	write(socket, greeting, offset+2);
 	read (socket, greeting, offset+2);
 
-	char success= greeting[0] == 0x05 && greeting[1] == 0x00;
+	char rep = greeting[1];
 	if (tofree) 
 		free(greeting);
 
-	return success ? 0 : -1;
+	return rep;
 }
 
 void usage(int argc, char** argv)
@@ -169,6 +169,7 @@ int main(int argc, char** argv)
 	else
 		f = stdin; // only for proxy checking
 
+	char currentHasSOCKS5 = 0;
 	int proxy = -1;
 	char* line = NULL;
 	size_t n_line = 0;
@@ -185,16 +186,18 @@ int main(int argc, char** argv)
 			break;
 		char* host = strtok(f ? line : argv[no+2], ":");
 		char* port = strtok(NULL, "\n");
+		if (!host || !port)
+			break;
 		char* type = strchr(port, ':');
-		char socks5enable = 0;
+		char nextHasSOCKS5 = 0;
 		if (type)
 		{
 			*(type++) = 0;
 			if (!strcmp(type, "socks5"))
-				socks5enable = 1;
+				nextHasSOCKS5 = 1;
 		}
-		if (!host || !port)
-			break;
+
+		int res;
 		switch (mode)
 		{
 		case PATH:
@@ -208,19 +211,26 @@ int main(int argc, char** argv)
 					return 1;
 				}
 			}
-			else if ((socks5enable ? socks5 : socks4)(proxy, host, port) < 0)
+			else
 			{
-				fprintf(stderr, "no %i: Could not reach next node (%s)\n", no, host);
-				close(proxy);
-				return 1;
+				res = (currentHasSOCKS5 ? socks5 : socks4)(proxy, host, port);
+				if (res)
+				{
+					fprintf(stderr, "no %i: Could not reach %s (%i)\n", no, host, res);
+					close(proxy);
+					return 1;
+				}
 			}
+			currentHasSOCKS5 = nextHasSOCKS5;
 			break;
 		case CHECK:
+			fprintf(stderr, "> %s:%s:%i\n", host, port, nextHasSOCKS5);
 			proxy = TCP_Connect(host, port);
+			currentHasSOCKS5 = nextHasSOCKS5;
 			if (proxy >= 0)
 			{
-				if ((socks5enable ? socks5 : socks4)(proxy, targetHost, targetPort) == 0)
-					fprintf(stdout, "%s:%s:%s\n", host, port, socks5enable ? "socks5" : "socks4");
+				if ((currentHasSOCKS5 ? socks5 : socks4)(proxy, targetHost, targetPort) == 0)
+					fprintf(stdout, "%s:%s:%s\n", host, port, currentHasSOCKS5 ? "socks5" : "socks4");
 				close(proxy);
 			}
 			break;
