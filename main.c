@@ -142,10 +142,12 @@ void usage(int argc, char** argv)
 		"         or as a file (one per line) ; if no option is given, stdin is assumed\n"
 		"         a proxy is of the form\n"
 		"\n"
-		"host:port[:type]\n"
+		"host:port[:type[:user:pass]]\n"
 		"  host   is an IPv4, IPv6 (not after a SOCKS4 proxy) or domain address\n"
 		"  port   is the port where the server listens for connections\n"
-		"  type   is optionnal and can be either 'socks4' or 'socks5'\n"
+		"  type   optionnal, can be either 'socks4' or 'socks5'\n"
+		"  user   optionnal, used for username/password authentication\n"
+		"  pass   optionnal, used for username/password authentication\n"
 		,
 		argv[0]
 	);
@@ -228,10 +230,6 @@ int main(int argc, char** argv)
 		char* user = strtok(NULL, ":\n");
 		char* pass = strtok(NULL, ":\n");
 		char nextHasSOCKS5 = type && !strcmp(type, "socks5");
-
-		fprintf(stderr, "> %s:%s (%s) %s:%s\n", host, port, type, user, pass);
-		no++;
-		continue;
 
 		// proceed to connect through it
 		int res;
