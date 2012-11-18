@@ -8,6 +8,7 @@
 
 #include "socket.h"
 
+// read some bytes from socket 'from' and write them to socket 'to'
 void passThrough(int from, int to)
 {
 	char buffer[256];
@@ -15,6 +16,9 @@ void passThrough(int from, int to)
 	write(to, buffer, n);
 }
 
+// assume socket is connected to a SOCKS4 proxy; ask it to connect to host:port
+// supports IPv4/domain address
+// return 0 on success, server response otherwise
 int socks4(int socket, char* host, char* port)
 {
 	static char greeting[9] = { 0x04, 0x01 };
@@ -39,22 +43,28 @@ int socks4(int socket, char* host, char* port)
 	return buffer[1] == 0x5a ? 0 : buffer[1];;
 }
 
+// assume socket is connected to a SOCKS5 proxy; ask it to connect to host:port
+// supports IPv4/domain/IPv6 address
+// return 0 on success, server response otherwise
+//
+// The comments give the form of the message sent to the proxy with:
+// V version
+// N length
+// M method
+// C command
+// R reserved
+// F family
+// A address
+// P port
 int socks5(int socket, char* host, char* port)
 {
+	// VNM
 	static char auth[3] = { 0x05, 0x01, 0x00 };
 	write(socket, auth, 3);
 	static char res[2];
 	read(socket, res, 2);
 	if (res[1])
 		return res[1];
-
-// V version
-// C command
-// R reserved
-// F family
-// N length
-// A address
-// P port
 
 	char IPgreeting[22] = { 0x05, 0x01, 0x00 };
 	char* greeting = IPgreeting;
@@ -136,6 +146,8 @@ int main(int argc, char** argv)
 	}
 
 	Mode mode;
+	// used for proxy checking as the destination target
+	// TODO : configure with parameters
 	char* targetHost = "173.236.190.252";
 	char* targetPort = "80";
 
@@ -152,7 +164,7 @@ int main(int argc, char** argv)
 	FILE* f;
 	if (argc >= 4 && !strcmp("-f", argv[2]))
 	{
-		f = fopen(argv[3], "r");
+		f = fopen(argv[3], "r"); // proxies in file
 		if (!f)
 		{
 			fprintf(stderr, "Could not open input file\n");
@@ -160,9 +172,10 @@ int main(int argc, char** argv)
 		}
 	}
 	else if (argc >= 3)
-		f = NULL; // list given as parameters
+		f = NULL; // proxies in arguments
 	else if (mode == PATH)
 	{
+		// stdin would be used both for proxy list and communication
 		fprintf(stderr, "What are you trying to do with my stdin?!\n");
 		return 1;
 	}
@@ -176,6 +189,7 @@ int main(int argc, char** argv)
 	int no = 0;
 	while (1)
 	{
+		// get next proxy information from file/arguments
 		if (f)
 		{
 			getline(&line, &n_line, f);
@@ -197,6 +211,7 @@ int main(int argc, char** argv)
 				nextHasSOCKS5 = 1;
 		}
 
+		// proceed to connect through it
 		int res;
 		switch (mode)
 		{
@@ -224,7 +239,6 @@ int main(int argc, char** argv)
 			currentHasSOCKS5 = nextHasSOCKS5;
 			break;
 		case CHECK:
-			fprintf(stderr, "> %s:%s:%i\n", host, port, nextHasSOCKS5);
 			proxy = TCP_Connect(host, port);
 			currentHasSOCKS5 = nextHasSOCKS5;
 			if (proxy >= 0)
@@ -245,7 +259,7 @@ int main(int argc, char** argv)
 
 	if (mode == PATH)
 	{
-		fprintf(stderr, "Connected\n");
+		fprintf(stderr, "> Connected\n");
 
 		fd_set fds;
 		FD_ZERO(&fds);
