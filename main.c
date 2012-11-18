@@ -1,6 +1,5 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include <assert.h>
 #include <string.h>
 #include <arpa/inet.h>
 #include <sys/select.h>
@@ -19,8 +18,12 @@ void passThrough(int from, int to)
 // assume socket is connected to a SOCKS4 proxy; ask it to connect to host:port
 // supports IPv4/domain address
 // return 0 on success, server response otherwise
-int socks4(int socket, char* host, char* port)
+// 'user' and 'pass' are ignored
+int socks4(int socket, char* host, char* port, char* user, char* pass)
 {
+	(void) user;
+	(void) pass;
+
 	static char greeting[9] = { 0x04, 0x01 };
 	static char buffer[8];
 
@@ -45,6 +48,7 @@ int socks4(int socket, char* host, char* port)
 
 // assume socket is connected to a SOCKS5 proxy; ask it to connect to host:port
 // supports IPv4/domain/IPv6 address
+// if 'user' and 'pass' are non-null, performs username/password authentication
 // return 0 on success, server response otherwise
 //
 // The comments give the form of the message sent to the proxy with:
@@ -56,15 +60,31 @@ int socks4(int socket, char* host, char* port)
 // F family
 // A address
 // P port
-int socks5(int socket, char* host, char* port)
+int socks5(int socket, char* host, char* port, char* user, char* pass)
 {
 	// VNM
-	static char auth[3] = { 0x05, 0x01, 0x00 };
+	static char auth[3] = { 0x05, 0x01 };
+	auth[2] = user && pass ? 0x02 : 0x00;
 	write(socket, auth, 3);
 	static char res[2];
 	read(socket, res, 2);
 	if (res[1])
 		return res[1];
+
+	if (user && pass)
+	{
+		char tmp;
+		tmp = 0x05;         write(socket, &tmp,  1);   // VER
+		tmp = strlen(user); write(socket, &tmp,  1);   // ULEN
+		                    write(socket, &user, tmp); // UNAME
+		tmp = strlen(pass); write(socket, &tmp,  1);   // PLEN
+		                    write(socket, &pass, tmp); // PASSWD
+
+		read(socket, &tmp, 1); // version
+		read(socket, &tmp, 1); // status
+		if (tmp)
+			return tmp;
+	}
 
 	char IPgreeting[22] = { 0x05, 0x01, 0x00 };
 	char* greeting = IPgreeting;
@@ -198,18 +218,20 @@ int main(int argc, char** argv)
 		}
 		else if (no+2 > argc)
 			break;
+
+		// parse proxy host, port, type and credentials
 		char* host = strtok(f ? line : argv[no+2], ":");
-		char* port = strtok(NULL, "\n");
+		char* port = strtok(NULL, ":\n");
 		if (!host || !port)
 			break;
-		char* type = strchr(port, ':');
-		char nextHasSOCKS5 = 0;
-		if (type)
-		{
-			*(type++) = 0;
-			if (!strcmp(type, "socks5"))
-				nextHasSOCKS5 = 1;
-		}
+		char* type = strtok(NULL, ":\n");
+		char* user = strtok(NULL, ":\n");
+		char* pass = strtok(NULL, ":\n");
+		char nextHasSOCKS5 = type && !strcmp(type, "socks5");
+
+		fprintf(stderr, "> %s:%s (%s) %s:%s\n", host, port, type, user, pass);
+		no++;
+		continue;
 
 		// proceed to connect through it
 		int res;
@@ -228,7 +250,7 @@ int main(int argc, char** argv)
 			}
 			else
 			{
-				res = (currentHasSOCKS5 ? socks5 : socks4)(proxy, host, port);
+				res = (currentHasSOCKS5 ? socks5 : socks4)(proxy, host, port, user, pass);
 				if (res)
 				{
 					fprintf(stderr, "no %i: Could not reach %s (%i)\n", no, host, res);
@@ -243,7 +265,7 @@ int main(int argc, char** argv)
 			currentHasSOCKS5 = nextHasSOCKS5;
 			if (proxy >= 0)
 			{
-				if ((currentHasSOCKS5 ? socks5 : socks4)(proxy, targetHost, targetPort) == 0)
+				if ((currentHasSOCKS5 ? socks5 : socks4)(proxy, targetHost, targetPort, user, pass) == 0)
 					fprintf(stdout, "%s:%s:%s\n", host, port, currentHasSOCKS5 ? "socks5" : "socks4");
 				close(proxy);
 			}
@@ -261,6 +283,8 @@ int main(int argc, char** argv)
 	{
 		fprintf(stderr, "> Connected\n");
 
+		// now waits for incoming messages from stdin or socket
+		// and pass them to the other end
 		fd_set fds;
 		FD_ZERO(&fds);
 		while (1)
