@@ -8,7 +8,7 @@
 #include "socket.h"
 
 // read some bytes from socket 'from' and write them to socket 'to'
-void passThrough(int from, int to)
+static void passThrough(int from, int to)
 {
 	char buffer[256];
 	int n = read(from, buffer, 256);
@@ -19,7 +19,7 @@ void passThrough(int from, int to)
 // supports IPv4/domain address
 // return 0 on success, server response otherwise
 // 'user' and 'pass' are ignored
-int socks4(int socket, char* host, char* port, char* user, char* pass)
+static int socks4(int socket, char* host, char* port, char* user, char* pass)
 {
 	(void) user;
 	(void) pass;
@@ -60,7 +60,7 @@ int socks4(int socket, char* host, char* port, char* user, char* pass)
 // F family
 // A address
 // P port
-int socks5(int socket, char* host, char* port, char* user, char* pass)
+static int socks5(int socket, char* host, char* port, char* user, char* pass)
 {
 	// VNM
 	static char auth[3] = { 0x05, 0x01 };
@@ -126,7 +126,7 @@ int socks5(int socket, char* host, char* port, char* user, char* pass)
 	return rep;
 }
 
-void usage(int argc, char** argv)
+static void usage(int argc, char** argv)
 {
 	(void) argc;
 	fprintf
