@@ -133,10 +133,12 @@ static void usage(int argc, char** argv)
 	(
 		stderr,
 		"Usage: %s mode [-f file|proxy1 [proxy2...]]\n"
+		"The proxies are chained to strenghten privacy\n"
 		"\n"
 		"mode:\n"
-		"  path   p  make a proxy chain to the target\n"
-		"  check  c  check that each proxy works\n"
+		"  cat    c  stdin and stdout are piped through the proxy chain\n"
+		"  serve  s  starts a SOCKS server sending data through the chain\n"
+		"  check  k  check that each proxy works\n"
 		"\n"
 		"proxies: the list of proxies can be given as the arguments of the command line\n"
 		"         or as a file (one per line) ; if no option is given, stdin is assumed\n"
@@ -155,7 +157,8 @@ static void usage(int argc, char** argv)
 
 typedef enum
 {
-	PATH,
+	CAT,
+	SERVE,
 	CHECK,
 } Mode;
 
@@ -167,15 +170,17 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
-	Mode mode;
 	// used for proxy checking as the destination target
 	// TODO : configure with parameters
 	char* targetHost = "173.236.190.252";
 	char* targetPort = "80";
 
-	if (!strcmp("path", argv[1]) || !strcmp("p", argv[1]))
-		mode = PATH;
-	else if (!strcmp("check", argv[1]) || !strcmp("c", argv[1]))
+	Mode mode;
+	if (!strcmp("cat", argv[1]) || !strcmp("c", argv[1]))
+		mode = CAT;
+	if (!strcmp("serve", argv[1]) || !strcmp("s", argv[1]))
+		mode == SERVE;
+	else if (!strcmp("check", argv[1]) || !strcmp("k", argv[1]))
 		mode = CHECK;
 	else
 	{
@@ -195,7 +200,7 @@ int main(int argc, char** argv)
 	}
 	else if (argc >= 3)
 		f = NULL; // proxies in arguments
-	else if (mode == PATH)
+	else if (mode == CAT)
 	{
 		// stdin would be used both for proxy list and communication
 		fprintf(stderr, "What are you trying to do with my stdin?!\n");
@@ -235,7 +240,7 @@ int main(int argc, char** argv)
 		int res;
 		switch (mode)
 		{
-		case PATH:
+		case CAT:
 			fprintf(stderr, "> %s:%s\n", host, port);
 			if (proxy < 0)
 			{
@@ -277,7 +282,7 @@ int main(int argc, char** argv)
 		fclose(f);
 	}
 
-	if (mode == PATH)
+	if (mode == CAT)
 	{
 		fprintf(stderr, "> Connected\n");
 
