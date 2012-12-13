@@ -286,7 +286,7 @@ int main(int argc, char** argv)
 			if (proxy < 0)
 				proxy = res;
 			if (mode == CHECK)
-				fprintf(stdout, "%s:%s:%s\n", host, port, currentHasSOCKS5 ? "socks5" : "socks4");
+				fprintf(stdout, "%-15s:%5s:%s\n", host, port, currentHasSOCKS5 ? "socks5" : "socks4");
 		}
 		currentHasSOCKS5 = nextHasSOCKS5;
 	}
