@@ -223,7 +223,7 @@ int main(int argc, char** argv)
 	int proxy = -1;
 	char* line = NULL;
 	size_t n_line = 0;
-	int no = 0;
+	int depth = 0;
 	while (1)
 	{
 		// get next proxy information from file/arguments
@@ -233,11 +233,11 @@ int main(int argc, char** argv)
 			if (feof(f))
 				break;
 		}
-		else if (no+2 > argc)
+		else if (depth+2 > argc)
 			break;
 
 		// parse proxy host, port, type and credentials
-		char* host = strtok(f ? line : argv[no+2], " \t:");
+		char* host = strtok(f ? line : argv[depth+2], " \t:");
 		char* port = strtok(NULL, " \t:\n");
 		if (!host || !port)
 			break;
@@ -246,52 +246,30 @@ int main(int argc, char** argv)
 		char* pass = strtok(NULL, " \t:\n");
 		char nextHasSOCKS5 = type && !strcmp(type, "socks5");
 
+		if (mode == CHECK)
+			fprintf(stderr, "> %s:%s\n", host, port);
+
 		// proceed to connect through it
-/*
-		switch (mode)
+		int res = (currentHasSOCKS5 ? socks5 : socks4)(proxy, host, port, user, pass);
+		if (res < 0)
 		{
-		case CAT:
-		case CHECK:
-*/
-			if (mode == CHECK)
-				fprintf(stderr, "> %s:%s\n", host, port);
-			int res = (currentHasSOCKS5 ? socks5 : socks4)(proxy, host, port, user, pass);
-			if (res < 0)
+			fprintf(stderr, "no %i: Could not reach %s:%s (%i)\n", depth, host, port, res);
+			if (mode == CAT)
 			{
-				fprintf(stderr, "no %i: Could not reach %s:%s (%i)\n", no, host, port, res);
-				if (mode == CAT)
-				{
-					if (proxy >= 0)
-						close(proxy);
-					exit(1);
-				}
+				if (proxy >= 0)
+					close(proxy);
+				exit(1);
 			}
-			else
-			{
-				no++;
-				if (proxy < 0)
-					proxy = res;
-				if (mode == CHECK)
-					fprintf(stdout, "%s:%s:%s\n", host, port, currentHasSOCKS5 ? "socks5" : "socks4");
-			}
-			currentHasSOCKS5 = nextHasSOCKS5;
-/*
-			break;
-		case CHECK:
-			proxy = TCP_Connect(host, port);
-			currentHasSOCKS5 = nextHasSOCKS5;
-			if (proxy >= 0)
-			{
-				if ((currentHasSOCKS5 ? socks5 : socks4)(proxy, targetHost, targetPort, user, pass) == 0)
-					fprintf(stdout, "%s:%s:%s\n", host, port, currentHasSOCKS5 ? "socks5" : "socks4");
-				close(proxy);
-			}
-			break;
-		case SERVE:
-			fprintf(stderr, "This feature is not implemented yet.\n");
-			exit(1);
 		}
-*/
+		else
+		{
+			depth++;
+			if (proxy < 0)
+				proxy = res;
+			if (mode == CHECK)
+				fprintf(stdout, "%s:%s:%s\n", host, port, currentHasSOCKS5 ? "socks5" : "socks4");
+		}
+		currentHasSOCKS5 = nextHasSOCKS5;
 	}
 	if (f)
 	{
