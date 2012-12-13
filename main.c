@@ -17,12 +17,15 @@ static void passThrough(int from, int to)
 
 // assume socket is connected to a SOCKS4 proxy; ask it to connect to host:port
 // supports IPv4/domain address
-// return 0 on success, server response otherwise
+// return 'socket' on success, opposite of server response otherwise
 // 'user' and 'pass' are ignored
 static int socks4(int socket, char* host, char* port, char* user, char* pass)
 {
 	(void) user;
 	(void) pass;
+
+	if (socket < 0)
+		return TCP_Connect(host, port);
 
 	static char greeting[9] = { 0x04, 0x01 };
 	static char buffer[8];
@@ -43,13 +46,13 @@ static int socks4(int socket, char* host, char* port, char* user, char* pass)
 		write(socket, host, strlen(host)+1);
 	read(socket, buffer, 8);
 
-	return buffer[1] == 0x5a ? 0 : buffer[1];;
+	return buffer[1] == 0x5a ? socket : -buffer[1];;
 }
 
 // assume socket is connected to a SOCKS5 proxy; ask it to connect to host:port
 // supports IPv4/domain/IPv6 address
 // if 'user' and 'pass' are non-null, performs username/password authentication
-// return 0 on success, server response otherwise
+// return 'socket' on success, opposite of server response otherwise
 //
 // The comments give the form of the message sent to the proxy with:
 // V version
@@ -62,6 +65,9 @@ static int socks4(int socket, char* host, char* port, char* user, char* pass)
 // P port
 static int socks5(int socket, char* host, char* port, char* user, char* pass)
 {
+	if (socket < 0)
+		return TCP_Connect(host, port);
+
 	// VNM
 	static char auth[3] = { 0x05, 0x01 };
 	auth[2] = user && pass ? 0x02 : 0x00;
@@ -69,7 +75,7 @@ static int socks5(int socket, char* host, char* port, char* user, char* pass)
 	static char res[2];
 	read(socket, res, 2);
 	if (res[1])
-		return res[1];
+		return -res[1];
 
 	if (user && pass)
 	{
@@ -83,7 +89,7 @@ static int socks5(int socket, char* host, char* port, char* user, char* pass)
 		read(socket, &tmp, 1); // version
 		read(socket, &tmp, 1); // status
 		if (tmp)
-			return tmp;
+			return -tmp;
 	}
 
 	char IPgreeting[22] = { 0x05, 0x01, 0x00 };
@@ -123,7 +129,7 @@ static int socks5(int socket, char* host, char* port, char* user, char* pass)
 	if (tofree) 
 		free(greeting);
 
-	return rep;
+	return rep ? -rep : socket;
 }
 
 static void usage(int argc, char** argv)
@@ -137,7 +143,7 @@ static void usage(int argc, char** argv)
 		"\n"
 		"mode:\n"
 		"  cat    c  stdin and stdout are piped through the proxy chain\n"
-		"  serve  s  starts a SOCKS server sending data through the chain\n"
+		"  serve  s  starts a server sending data through the chain\n"
 		"  check  k  check that each proxy works\n"
 		"\n"
 		"proxies: the list of proxies can be given as the arguments of the command line\n"
@@ -167,25 +173,25 @@ int main(int argc, char** argv)
 	if (argc < 2)
 	{
 		usage(argc, argv);
-		return 1;
+		exit(1);
 	}
 
 	// used for proxy checking as the destination target
 	// TODO : configure with parameters
-	char* targetHost = "173.236.190.252";
-	char* targetPort = "80";
+//	char* targetHost = "173.236.190.252";
+//	char* targetPort = "80";
 
 	Mode mode;
 	if (!strcmp("cat", argv[1]) || !strcmp("c", argv[1]))
 		mode = CAT;
-	if (!strcmp("serve", argv[1]) || !strcmp("s", argv[1]))
-		mode == SERVE;
+	else if (!strcmp("serve", argv[1]) || !strcmp("s", argv[1]))
+		mode = SERVE;
 	else if (!strcmp("check", argv[1]) || !strcmp("k", argv[1]))
 		mode = CHECK;
 	else
 	{
 		usage(argc, argv);
-		return 1;
+		exit(1);
 	}
 
 	FILE* f;
@@ -195,7 +201,7 @@ int main(int argc, char** argv)
 		if (!f)
 		{
 			fprintf(stderr, "Could not open input file\n");
-			return 1;
+			exit(1);
 		}
 	}
 	else if (argc >= 3)
@@ -204,7 +210,7 @@ int main(int argc, char** argv)
 	{
 		// stdin would be used both for proxy list and communication
 		fprintf(stderr, "What are you trying to do with my stdin?!\n");
-		return 1;
+		exit(1);
 	}
 	else
 		f = stdin; // only for proxy checking
@@ -227,41 +233,45 @@ int main(int argc, char** argv)
 			break;
 
 		// parse proxy host, port, type and credentials
-		char* host = strtok(f ? line : argv[no+2], ":");
-		char* port = strtok(NULL, ":\n");
+		char* host = strtok(f ? line : argv[no+2], " \t:");
+		char* port = strtok(NULL, " \t:\n");
 		if (!host || !port)
 			break;
-		char* type = strtok(NULL, ":\n");
-		char* user = strtok(NULL, ":\n");
-		char* pass = strtok(NULL, ":\n");
+		char* type = strtok(NULL, " \t:\n");
+		char* user = strtok(NULL, " \t:\n");
+		char* pass = strtok(NULL, " \t:\n");
 		char nextHasSOCKS5 = type && !strcmp(type, "socks5");
 
 		// proceed to connect through it
-		int res;
+/*
 		switch (mode)
 		{
 		case CAT:
-			fprintf(stderr, "> %s:%s\n", host, port);
-			if (proxy < 0)
+		case CHECK:
+*/
+			if (mode == CHECK)
+				fprintf(stderr, "> %s:%s\n", host, port);
+			int res = (currentHasSOCKS5 ? socks5 : socks4)(proxy, host, port, user, pass);
+			if (res < 0)
 			{
-				proxy = TCP_Connect(host, port);
-				if (proxy < 0)
+				fprintf(stderr, "no %i: Could not reach %s:%s (%i)\n", no, host, port, res);
+				if (mode == CAT)
 				{
-					fprintf(stderr, "local: Could not reach proxy no 1\n");
-					return 1;
+					if (proxy >= 0)
+						close(proxy);
+					exit(1);
 				}
 			}
 			else
 			{
-				res = (currentHasSOCKS5 ? socks5 : socks4)(proxy, host, port, user, pass);
-				if (res)
-				{
-					fprintf(stderr, "no %i: Could not reach %s (%i)\n", no, host, res);
-					close(proxy);
-					return 1;
-				}
+				no++;
+				if (proxy < 0)
+					proxy = res;
+				if (mode == CHECK)
+					fprintf(stdout, "%s:%s:%s\n", host, port, currentHasSOCKS5 ? "socks5" : "socks4");
 			}
 			currentHasSOCKS5 = nextHasSOCKS5;
+/*
 			break;
 		case CHECK:
 			proxy = TCP_Connect(host, port);
@@ -273,8 +283,11 @@ int main(int argc, char** argv)
 				close(proxy);
 			}
 			break;
+		case SERVE:
+			fprintf(stderr, "This feature is not implemented yet.\n");
+			exit(1);
 		}
-		no++;
+*/
 	}
 	if (f)
 	{
@@ -298,7 +311,7 @@ int main(int argc, char** argv)
 			if (res < 0)
 			{
 				perror("select()");
-				return 1;
+				exit(1);
 			}
 			else if (FD_ISSET(0, &fds))
 				passThrough(0, proxy);
