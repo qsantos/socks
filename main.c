@@ -8,11 +8,15 @@
 #include "socket.h"
 
 // read some bytes from socket 'from' and write them to socket 'to'
-static void passThrough(int from, int to)
+// returns 1 if EOF
+static char passThrough(int from, int to)
 {
 	char buffer[256];
 	int n = read(from, buffer, 256);
 	write(to, buffer, n);
+
+	// EOF test
+	return n == 0;
 }
 
 // assume socket is connected to a SOCKS4 proxy; ask it to connect to host:port
@@ -301,12 +305,15 @@ int main(int argc, char** argv)
 
 		// now waits for incoming messages from stdin or socket
 		// and pass them to the other end
+		// EOF is detected from read() return value
 		fd_set fds;
 		FD_ZERO(&fds);
+		char inEOF  = 0;
+		char outEOF = 0;
 		while (1)
 		{
-			FD_SET(0, &fds);
-			FD_SET(proxy, &fds);
+			if (!inEOF)  FD_SET(0, &fds);
+			if (!outEOF) FD_SET(proxy, &fds);
 			int res = select(proxy+1, &fds, NULL, NULL, NULL);
 			if (res < 0)
 			{
@@ -314,9 +321,15 @@ int main(int argc, char** argv)
 				exit(1);
 			}
 			else if (FD_ISSET(0, &fds))
-				passThrough(0, proxy);
+			{
+				inEOF = passThrough(0, proxy);
+				FD_CLR(0, &fds);
+			}
 			else if (FD_ISSET(proxy, &fds))
-				passThrough(proxy, 1);
+			{
+				outEOF = passThrough(proxy, 1);
+				FD_CLR(proxy, &fds);
+			}
 		}
 
 		close(proxy);
