@@ -269,7 +269,7 @@ int main(int argc, char** argv)
 		if (res < 0)
 		{
 			fprintf(stderr, "no %i: Could not reach %s:%s (%i)\n", depth, host, port, res);
-			if (mode == CAT)
+			if (!o_continue)
 			{
 				if (proxy >= 0)
 					close(proxy);
