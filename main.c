@@ -142,13 +142,16 @@ static void usage(int argc, char** argv)
 	fprintf
 	(
 		stderr,
-		"Usage: %s mode [-f file|proxy1 [proxy2...]]\n"
+		"Usage: %s mode [OPTIONS] [-f file|proxy1 [proxy2...]]\n"
 		"The proxies are chained to strenghten privacy\n"
 		"\n"
 		"mode:\n"
 		"  cat    c  stdin and stdout are piped through the proxy chain\n"
 		"  serve  s  starts a server sending data through the chain\n"
-		"  check  k  check that each proxy works\n"
+		"  check  k  check the proxy chain\n"
+		"\n"
+		"OPTIONS:\n"
+		"  --continue  -c  ignore any unreachable proxy and test the next one\n"
 		"\n"
 		"proxies: the list of proxies can be given as the arguments of the command line\n"
 		"         or as a file (one per line) ; if no option is given, stdin is assumed\n"
@@ -180,35 +183,47 @@ int main(int argc, char** argv)
 		exit(1);
 	}
 
-	// used for proxy checking as the destination target
-	// TODO : configure with parameters
-//	char* targetHost = "173.236.190.252";
-//	char* targetPort = "80";
+	int argi = 1;
 
 	Mode mode;
-	if (!strcmp("cat", argv[1]) || !strcmp("c", argv[1]))
+	char* modestr = argv[argi];
+	if (!strcmp("cat", modestr) || !strcmp("c", modestr))
 		mode = CAT;
-	else if (!strcmp("serve", argv[1]) || !strcmp("s", argv[1]))
+	else if (!strcmp("serve", modestr) || !strcmp("s", modestr))
 		mode = SERVE;
-	else if (!strcmp("check", argv[1]) || !strcmp("k", argv[1]))
+	else if (!strcmp("check", modestr) || !strcmp("k", modestr))
 		mode = CHECK;
 	else
 	{
 		usage(argc, argv);
 		exit(1);
 	}
+	argi++;
+
+	char o_continue = 0;
+	while (1)
+	{
+		char* optstr = argv[argi];
+		if (!strcmp("--continue", optstr) || !strcmp("-c", optstr))
+			o_continue = 1;
+		else
+			break;
+		argi++;
+	}
 
 	FILE* f;
-	if (argc >= 4 && !strcmp("-f", argv[2]))
+	if (argi+1 < argc && !strcmp("-f", argv[argi]))
 	{
-		f = fopen(argv[3], "r"); // proxies in file
+		argi++;
+		f = fopen(argv[argi], "r"); // proxies in file
+		argi++;
 		if (!f)
 		{
 			fprintf(stderr, "Could not open input file\n");
 			exit(1);
 		}
 	}
-	else if (argc >= 3)
+	else if (argi < argc)
 		f = NULL; // proxies in arguments
 	else if (mode == CAT)
 	{
@@ -233,11 +248,11 @@ int main(int argc, char** argv)
 			if (feof(f))
 				break;
 		}
-		else if (depth+2 > argc)
+		else if (argi >= argc)
 			break;
 
 		// parse proxy host, port, type and credentials
-		char* host = strtok(f ? line : argv[depth+2], " \t:");
+		char* host = strtok(f ? line : argv[argi++], " \t:");
 		char* port = strtok(NULL, " \t:\n");
 		if (!host || !port)
 			break;
