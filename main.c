@@ -152,6 +152,7 @@ static void usage(int argc, char** argv)
 		"\n"
 		"OPTIONS:\n"
 		"  --continue  -c  ignore any unreachable proxy and test the next one\n"
+		"  --verbose   -v  show more information\n"
 		"\n"
 		"proxies: the list of proxies can be given as the arguments of the command line\n"
 		"         or as a file (one per line) ; if no option is given, stdin is assumed\n"
@@ -201,11 +202,14 @@ int main(int argc, char** argv)
 	argi++;
 
 	char o_continue = 0;
+	char o_verbose  = 0;
 	while (1)
 	{
 		char* optstr = argv[argi];
 		if (!strcmp("--continue", optstr) || !strcmp("-c", optstr))
 			o_continue = 1;
+		else if (!strcmp("--verbose", optstr) || !strcmp("-v", optstr))
+			o_verbose = 1;
 		else
 			break;
 		argi++;
@@ -261,7 +265,7 @@ int main(int argc, char** argv)
 		char* pass = strtok(NULL, " \t:\n");
 		char nextHasSOCKS5 = type && !strcmp(type, "socks5");
 
-		if (mode == CHECK)
+		if (o_verbose)
 			fprintf(stderr, "> %s:%s\n", host, port);
 
 		// proceed to connect through it
@@ -317,11 +321,13 @@ int main(int argc, char** argv)
 			{
 				inEOF = passThrough(0, proxy);
 				FD_CLR(0, &fds);
+				if (inEOF && o_verbose) fprintf(stderr, "Local fd closed\n");
 			}
 			else if (FD_ISSET(proxy, &fds))
 			{
 				outEOF = passThrough(proxy, 1);
 				FD_CLR(proxy, &fds);
+				if (outEOF && o_verbose) fprintf(stderr, "Remote fd closed\n");
 			}
 		}
 
