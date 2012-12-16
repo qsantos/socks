@@ -4,6 +4,7 @@
 #include <arpa/inet.h>
 #include <sys/select.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include "socket.h"
 
@@ -13,10 +14,49 @@ static char passThrough(int from, int to)
 {
 	char buffer[256];
 	int n = read(from, buffer, 256);
-	write(to, buffer, n);
 
-	// EOF test
-	return n == 0;
+	if (n < 0) // error
+	{
+		fprintf(stderr, "err: %s (%i)\n", strerror(errno), errno);
+		exit(1);
+	}
+	else if (n == 0) // EOF
+		return 1;
+
+	write(to, buffer, n);
+	return 0;
+}
+
+// send data from one another until EOF
+// returns 0 if a ended the connection, 1 if b did
+static char passAll(int a_in, int a_out, int b_in, int b_out)
+{
+	int maxfd = a_in > b_in ? a_in : b_in;
+	fd_set fds;
+	FD_ZERO(&fds);
+	char a_EOF = 0;
+	char b_EOF = 0;
+	while (1)
+	{
+		if (!a_EOF) FD_SET(a_in, &fds);
+		if (!b_EOF) FD_SET(b_in, &fds);
+		int res = select(maxfd+1, &fds, NULL, NULL, NULL);
+		if (res < 0)
+		{
+			perror("select()");
+			exit(1);
+		}
+		else if (FD_ISSET(a_in, &fds))
+		{
+			a_EOF = passThrough(a_in, b_out);
+			FD_CLR(a_in, &fds);
+		}
+		else if (FD_ISSET(b_in, &fds))
+		{
+			b_EOF = passThrough(b_in, a_out);
+			FD_CLR(b_in, &fds);
+		}
+	}
 }
 
 // assume socket is connected to a SOCKS4 proxy; ask it to connect to host:port
@@ -298,39 +338,34 @@ int main(int argc, char** argv)
 
 	if (mode == CAT)
 	{
-		fprintf(stderr, "> Connected\n");
+		if (o_verbose)
+			fprintf(stderr, "> Connected\n");
 
-		// now waits for incoming messages from stdin or socket
-		// and pass them to the other end
-		// EOF is detected from read() return value
-		fd_set fds;
-		FD_ZERO(&fds);
-		char inEOF  = 0;
-		char outEOF = 0;
-		while (1)
+		int res = passAll(0, 1, proxy, proxy);
+		if (o_verbose)
 		{
-			if (!inEOF)  FD_SET(0, &fds);
-			if (!outEOF) FD_SET(proxy, &fds);
-			int res = select(proxy+1, &fds, NULL, NULL, NULL);
-			if (res < 0)
-			{
-				perror("select()");
-				exit(1);
-			}
-			else if (FD_ISSET(0, &fds))
-			{
-				inEOF = passThrough(0, proxy);
-				FD_CLR(0, &fds);
-				if (inEOF && o_verbose) fprintf(stderr, "Local fd closed\n");
-			}
-			else if (FD_ISSET(proxy, &fds))
-			{
-				outEOF = passThrough(proxy, 1);
-				FD_CLR(proxy, &fds);
-				if (outEOF && o_verbose) fprintf(stderr, "Remote fd closed\n");
-			}
+			if (res)
+				fprintf(stderr, "Remote closed\n");
+			else
+				fprintf(stderr, "Local closed\n");
 		}
 
+		close(proxy);
+	}
+	if (mode == SERVE)
+	{
+		int server = TCP_Listen("4242");
+		if (o_verbose)
+			fprintf(stderr, "> Awaiting connection\n");
+
+		int client = TCP_Accept(server);
+		if (o_verbose)
+			fprintf(stderr, "> Client connected\n");
+
+		passAll(client, client, proxy, proxy);
+
+		close(client);
+		close(server);
 		close(proxy);
 	}
 
