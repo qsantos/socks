@@ -20,7 +20,7 @@ do
 done
 exit 0
 /*\
- *  This is an awesome programm simulating awesome battles of awesome robot tanks
+ *  Proxy tools for SOCKS
  *  Copyright (C) 2012  Quentin SANTOS
  *
  *  This program is free software: you can redistribute it and/or modify
