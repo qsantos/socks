@@ -1,3 +1,24 @@
+#!/bin/bash
+for i in $(find -name "*.[hc]")
+do
+	exec > tmp
+
+	# new header (end of this script)
+	tail -n17 $0
+	echo ""
+
+	# length of the old header
+	line=`grep -Enm1 '^\\\\\*/$' $i`
+	line=${line%%:\\*/}
+	line=${line:--1}
+	line=$(($line+1))
+
+	# skip the old header
+	tail $i -n+$line
+
+	mv tmp $i
+done
+exit 0
 /*\
  *  This is an awesome programm simulating awesome battles of awesome robot tanks
  *  Copyright (C) 2012  Quentin SANTOS
@@ -15,16 +36,3 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 \*/
-
-
-#ifndef SOCKET_H
-#define SOCKET_H
-
-int TCP_Connect (const char*, const char*);
-int TCP_ListenTo(const char*, const char*);
-int TCP_Listen  (const char*);
-int TCP_Accept  (int);
-
-void TCP_Timeout(int, int);
-
-#endif
